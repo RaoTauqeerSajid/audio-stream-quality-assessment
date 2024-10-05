@@ -1,103 +1,123 @@
 
 # WebSocket Audio Stream - Client & Server
 
-This project facilitates real-time audio streaming and quality assessment over WebSocket connections. It includes a client for capturing live microphone audio or sending audio files (WAV, MP3) and a server for assessing speech quality using the SQUIM Objective model.
+This project is all about enabling real-time audio streaming and speech quality assessment over WebSocket connections. The setup includes a client for capturing live microphone audio or sending audio files (WAV, MP3), and a server that analyzes the speech quality using the **SQUIM Objective model**. To boost performance, the server taps into GPU resources via the NVIDIA Container Toolkit.
 
-## My Enviornment for code testing
-- Python 3.12.5
-- Ubuntu 24
+## Environment for Testing
+Here's what you'll need to get everything running:
+- **Python 3.12.5**
+- **Ubuntu 24**
+- **CUDA 12.2** (GPU support via Docker)
 
 ## Setup Instructions
 
-### Step 1: Create and Activate a Virtual Environment
+### Step 1: Set Up NVIDIA Container Toolkit
+
+To ensure the server uses GPU, you need to install the **NVIDIA drivers** and **NVIDIA Container Toolkit**.
+
+1. **Install the Toolkit** by running the following:
+
+   ```bash
+   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg      && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list |        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' |        sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+   sudo apt-get update
+
+   sudo apt-get install -y nvidia-container-toolkit
+   ```
+
+2. After that, restart Docker to apply the changes:
+   ```bash
+   sudo systemctl restart docker
+   ```
+
+### Step 2: Build and Run with Docker Compose
+
+Now, clone the repository, navigate to the project folder, and run Docker Compose to build the client and server:
 
 ```bash
-# Install virtualenv if not already installed
-pip install virtualenv
-
-# Create a virtual environment named 'env'
-python3 -m venv env
-
-# Activate the virtual environment
-source env/bin/activate
+docker-compose up -d --build
 ```
 
-### Step 2: Install Dependencies
+This command will spin up both the `websocket_server` (which uses the GPU) and the `websocket_client`.
 
-Ensure you are inside the virtual environment:
+### Step 3: Running the WebSocket Client
+
+The WebSocket client can send either live audio or pre-recorded audio files to the server. Here’s how to get started:
+
+1. Launch the client:
+   ```bash
+   docker exec -it websocket_client bash
+   python websocket_client.py
+   ```
+
+2. You'll be given a choice of **four input modes**:
+   - **1. Microphone input**: Streams live audio from mic to the server.
+   - **2. Single audio file**: Send a pre-recorded audio file (WAV or MP3).
+   - **3. Directory**: Send all audio files from a specified folder.
+   - **4. Exit**: Close the client.
+
+3. For microphone input, press `1`. To quit the live streaming, press `q` during recording.
+
+4. For audio files, press `2` or `3`, and provide the path when prompted. For directories, provide the folder path.
+
+5. For exit and close the client press `4`.
+
+### Step 4: Mounting Host Directory to Container (and Using Paths)
+
+I’ve set it up so that a directory on local machine is shared with the container, making it easy to access files from either side.
+
+- **Host Directory Mounting**:  
+  In the `docker-compose.yml` file, I’am mounting host’s directory (`/home/tauqeer/Downloads/dataset`) to `/app/files` inside the container:
+  
+  ```yaml
+  volumes:
+    - /home/tauqeer/Downloads/dataset:/app/files
+  ```
+
+  This lets you access any files in `/home/tauqeer/Downloads/dataset` from within the container at `/app/files`.
+
+- **Accessing Audio Files**:  
+  When the client prompts you for a file or folder path, use the **container’s path** (like `/app/files`) instead of host's path.  
+  - For example: If file is located at `/home/tauqeer/Downloads/dataset/sample.wav`, input `/app/files/sample.wav`.
+
+### Step 5: Monitoring GPU Usage
+
+Want to keep an eye on how much GPU power the server is using? You can check with:
 
 ```bash
-# Install the required libraries from requirements.txt
-pip install -r requirements.txt
+nvidia-smi
 ```
 
-### Step 3: Running the Server
-
-1. Navigate to the server directory:
-
-```bash
-cd app/server
-```
-
-2. Start the WebSocket server:
-
-```bash
-python websocket_server.py
-```
-
-The server will now be listening for incoming audio streams on `ws://localhost:8000`.
-
-### Step 4: Running the Client
-
-1. Navigate to the client directory:
-
-```bash
-cd app/client
-```
-
-2. Start the WebSocket client:
-
-```bash
-python websocket_client.py
-```
-
-3. You will be prompted to select an audio source:
-    - Press `1` to capture live microphone audio.
-    - Press `2` to send an audio file (WAV or MP3).
-
-For **live microphone streaming**, press `1`. To quit microphone streaming, press `q` and `Enter` during recording.
-
-For **audio file transmission**, press `2` and provide the full path to a supported audio file (WAV or MP3). If an unsupported file format is provided, the system will prompt you to try again or select a different audio source.
-
-### Step 5: Recording Microphone Audio
-
-When you choose to stream from the microphone (`1`), the client will continuously send audio data. Press `q` to stop recording and terminate the streaming session.
-
-### Step 6: Handling Errors
-
-- If you attempt to send an unsupported audio file type (such as `.ogg`), you will be prompted to try again or choose another source.
-- In the event of connection closure or errors, the client will automatically attempt to reconnect to the WebSocket server.
+This will display real-time GPU usage stats.
 
 ### File Structure
 
 ```
 app/
 ├── client/
-│   └── websocket_client.py  # The client-side code for sending audio data
+│   ├── Dockerfile           # Dockerfile for building the client
+│   ├── requirements.txt     # Python dependencies for the client
+│   ├── wait-for-it.sh       # Script for waiting for the server to be ready
+│   └── websocket_client.py  # Client-side code for sending audio data
 ├── server/
-│   └── websocket_server.py  # The server-side code for receiving and analyzing audio data
-└── requirements.txt         # Python dependencies for both client and server
+│   ├── Dockerfile           # Dockerfile for building the server
+│   ├── requirements.txt     # Python dependencies for the server
+│   └── websocket_server.py  # Server-side code for receiving and analyzing audio data
+├── docker-compose.yml       # Configuration file for Docker Compose
+└── README.md                # Project documentation
 ```
 
 ### Key Features
 
-- **Live audio streaming**: Capture and stream microphone audio in real-time.
-- **File-based audio transmission**: Send pre-recorded audio files (WAV, MP3).
-- **Speech quality analysis**: The server evaluates the audio quality based on PESQ, STOI, and SI-SDR metrics.
-- **Automatic reconnection**: The client will reconnect to the server automatically if the connection is closed.
+- **Real-time audio streaming**: Stream live microphone audio.
+- **File-based audio transmission**: Send WAV or MP3 files.
+- **Directory-based audio transmission**: Send multiple audio files from a directory.
+- **Speech quality analysis**: The server assesses the audio quality using PESQ, STOI, and SI-SDR metrics, utilizing GPU for faster performance.
+- **Automatic reconnection**: The client automatically reconnects to the server if the connection drops.
 
 ### Notes
 
-- Ensure your microphone permissions are enabled and functional on Ubuntu 24.
-- Supported file formats are WAV and MP3. Unsupported formats will trigger a retry prompt.
-- The project uses Python 3.12.5, so make sure all dependencies in `requirements.txt` are installed in a Python environment compatible with your system.
+- Ensure that microphone permissions are enabled and working properly on **Ubuntu 24**.
+- This project supports **WAV** and **MP3** formats. Unsupported formats will prompt a retry.
+- The project uses **Python 3.12.5** and **CUDA 12.2**, so ensure that environment is compatible.
+

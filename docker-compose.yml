@@ -1,0 +1,38 @@
+services:
+  websocket_server:
+    build:
+      context: ./server
+    ports:
+      - "8000:8000"
+    container_name: websocket_server
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+  websocket_client:
+    build:
+      context: ./client
+    container_name: websocket_client
+    depends_on:
+      - websocket_server
+    devices:
+      - /dev/snd:/dev/snd
+    privileged: true
+    volumes:
+      - /home/tauqeer/Downloads/dataset:/app/files  # Mount host directory to container
+      - /run/user/1000/pulse:/run/user/1000/pulse  # Ensure PulseAudio connection
+    environment:
+      - AUDIO_DIR=/app/files  # Path to the directory containing audio files
+      - WS_URL=ws://websocket_server:8000
+      - PYTHONUNBUFFERED=1
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native  # PulseAudio server path
+    stdin_open: true  # For interactive terminal input
+    tty: true  # Allocate a pseudo-TTY for interactive mode
+    entrypoint: ["/app/wait-for-it.sh", "websocket_server:8000", "--", "python", "websocket_client.py"]
